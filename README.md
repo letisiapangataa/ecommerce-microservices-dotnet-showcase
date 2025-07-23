@@ -357,8 +357,4 @@ This project showcases the following AZ-204 certification skills:
 
 ---
 
-## 📞 Support
-
-For questions and support, please open an issue in the GitHub repository or contact the development team.
-
-**Happy coding! 🚀**
+For questions and support, please open an issue in the GitHub repository or contact me at mailto:lpangataa@outlook.com.
