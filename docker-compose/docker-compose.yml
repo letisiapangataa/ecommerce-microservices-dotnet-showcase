@@ -1,0 +1,141 @@
+version: '3.8'
+
+services:
+  # User Service
+  user-service:
+    build:
+      context: .
+      dockerfile: src/UserService/UserService.API/Dockerfile
+    container_name: user-service
+    ports:
+      - "5001:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__ServiceBus=
+      - ServiceBus__TopicName=user-events
+    depends_on:
+      - redis
+    networks:
+      - ecommerce-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Product Service
+  product-service:
+    build:
+      context: .
+      dockerfile: src/ProductService/ProductService.API/Dockerfile
+    container_name: product-service
+    ports:
+      - "5002:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__ServiceBus=
+      - ServiceBus__TopicName=product-events
+    depends_on:
+      - redis
+    networks:
+      - ecommerce-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Order Service
+  order-service:
+    build:
+      context: .
+      dockerfile: src/OrderService/OrderService.API/Dockerfile
+    container_name: order-service
+    ports:
+      - "5003:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__ServiceBus=
+      - ServiceBus__TopicName=order-events
+      - ExternalServices__UserService=http://user-service:8080
+      - ExternalServices__ProductService=http://product-service:8080
+    depends_on:
+      - user-service
+      - product-service
+      - redis
+    networks:
+      - ecommerce-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # API Gateway
+  api-gateway:
+    build:
+      context: .
+      dockerfile: src/ApiGateway/ApiGateway/Dockerfile
+    container_name: api-gateway
+    ports:
+      - "5000:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+      - ServiceEndpoints__UserService=http://user-service:8080
+      - ServiceEndpoints__ProductService=http://product-service:8080
+      - ServiceEndpoints__OrderService=http://order-service:8080
+    depends_on:
+      - user-service
+      - product-service
+      - order-service
+    networks:
+      - ecommerce-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Redis Cache (for caching and session management)
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - ecommerce-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Nginx Load Balancer
+  nginx:
+    image: nginx:alpine
+    container_name: nginx-lb
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - api-gateway
+    networks:
+      - ecommerce-network
+
+volumes:
+  redis_data:
+
+networks:
+  ecommerce-network:
+    driver: bridge

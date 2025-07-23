@@ -1,0 +1,58 @@
+name: Build and Test Microservices
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '9.0.x'
+        
+    - name: Restore dependencies
+      run: dotnet restore EcommerceMicroservices.sln
+      
+    - name: Build solution
+      run: dotnet build EcommerceMicroservices.sln --no-restore --configuration Release
+      
+    - name: Run tests
+      run: dotnet test EcommerceMicroservices.sln --no-build --configuration Release --verbosity normal
+      
+    - name: Build Docker images
+      run: |
+        docker build -f src/UserService/UserService.API/Dockerfile -t user-service:${{ github.sha }} .
+        
+    - name: Run integration tests
+      run: |
+        # Start services for integration testing
+        docker run -d -p 5001:8080 --name user-service-test user-service:${{ github.sha }}
+        sleep 30
+        
+        # Basic health check test
+        curl -f http://localhost:5001/health || exit 1
+        
+        # Cleanup
+        docker stop user-service-test
+        docker rm user-service-test
+
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'table'
+        exit-code: '0'
